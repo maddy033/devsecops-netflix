@@ -43,17 +43,9 @@ pipeline {
 
                         docker build \
                           --build-arg TMDB_V3_API_KEY=$TMDB_KEY \
-                          -t $IMAGE_NAME .
+                          -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG .
                     '''
                 }
-            }
-        }
-
-        stage('Docker Tag') {
-            steps {
-                sh '''
-                    docker tag $IMAGE_NAME $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
-                '''
             }
         }
 
@@ -74,8 +66,14 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 sh '''
+                    echo "Deploying to EKS..."
+
+                    aws eks update-kubeconfig --region ap-south-1 --name EKS_CLUSTER
+
                     kubectl apply -f $K8S_DIR/deployment.yml
                     kubectl apply -f $K8S_DIR/service.yml
+
+                    kubectl rollout status deployment/netflix-app
 
                     kubectl get pods
                     kubectl get svc
@@ -86,11 +84,11 @@ pipeline {
 
     post {
         success {
-            echo "🚀 SUCCESS: Deployed to EKS"
+            echo "🚀 SUCCESS: CI/CD pipeline completed & deployed to EKS"
         }
 
         failure {
-            echo "❌ FAILED pipeline"
+            echo "❌ FAILED pipeline - check logs"
         }
     }
 }
