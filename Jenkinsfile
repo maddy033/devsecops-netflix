@@ -12,8 +12,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/maddy033/devsecops-netflix.git'
+                git 'https://github.com/maddy033/devsecops-netflix.git'
             }
         }
 
@@ -37,10 +36,15 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh '''
-                    echo "Building Docker image..."
-                    docker build -t $IMAGE_NAME .
-                '''
+                withCredentials([string(credentialsId: 'tmdb-api-key', variable: 'TMDB_KEY')]) {
+                    sh '''
+                        echo "Building Docker image..."
+
+                        docker build \
+                          --build-arg TMDB_V3_API_KEY=$TMDB_KEY \
+                          -t $IMAGE_NAME .
+                    '''
+                }
             }
         }
 
@@ -55,11 +59,10 @@ pipeline {
 
         stage('Docker Login & Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-cred',
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred',
                     usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
-                )]) {
+                    passwordVariable: 'PASS')]) {
+
                     sh '''
                         echo "$PASS" | docker login -u "$USER" --password-stdin
                         docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
@@ -71,15 +74,13 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 sh '''
-                    echo "Deploying to EKS..."
+                    echo "Deploying to Kubernetes (EKS)..."
 
                     kubectl apply -f $K8S_DIR/deployment.yml
                     kubectl apply -f $K8S_DIR/service.yml
 
-                    echo "Pods:"
+                    echo "Deployment status:"
                     kubectl get pods
-
-                    echo "Service:"
                     kubectl get svc
                 '''
             }
@@ -88,10 +89,11 @@ pipeline {
 
     post {
         success {
-            echo "🚀 CI/CD SUCCESS → Deployed on EKS"
+            echo "🚀 CI/CD SUCCESS: App deployed to EKS"
         }
+
         failure {
-            echo "❌ Pipeline FAILED"
+            echo "❌ Pipeline FAILED - Check logs"
         }
     }
 }
