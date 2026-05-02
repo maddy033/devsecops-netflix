@@ -23,7 +23,7 @@ pipeline {
                     sh '''
                         docker build \
                           --build-arg TMDB_V3_API_KEY=$TMDB_KEY \
-                          --build-arg VITE_APP_API_ENDPOINT_URL=https://api.themoviedb.org/3 \
+                          --build-arg VITE_APP_API_ENDPOINT_URL=http://tmdb-backend-service:5000/api \
                           -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG .
                     '''
                 }
@@ -50,11 +50,13 @@ pipeline {
                     aws eks update-kubeconfig --region ap-south-1 --name EKS_CLUSTER
 
                     # Update deployment image dynamically
-                    kubectl set image deployment/netflix-app \
-                      netflix-app=$DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
+                    #kubectl set image deployment/netflix-app \
+                    #netflix-app=$DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
+		    kubectl apply -f $K8S_DIR/deployment.yml
+		    kubectl apply -f $K8S_DIR/service.yml
 
                     kubectl rollout status deployment/netflix-app
-
+		    kubectl rollout status deployment/netflix-app
                     kubectl get pods
                     kubectl get svc
                 '''
