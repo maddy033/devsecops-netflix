@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKERHUB_USER = "mandar0333"
         IMAGE_NAME = "netflix-clone"
-        IMAGE_TAG = "latest"
+        IMAGE_TAG = "${BUILD_NUMBER}"
         K8S_DIR = "Kubernetes"
     }
 
@@ -17,32 +17,13 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                sh '''
-                    echo "Installing dependencies..."
-                    yarn install
-                '''
-            }
-        }
-
-        stage('Build Application') {
-            steps {
-                sh '''
-                    echo "Building React app..."
-                    yarn build
-                '''
-            }
-        }
-
         stage('Docker Build') {
             steps {
                 withCredentials([string(credentialsId: 'tmdb-api-key', variable: 'TMDB_KEY')]) {
                     sh '''
-                        echo "Building Docker image..."
-
                         docker build \
                           --build-arg TMDB_V3_API_KEY=$TMDB_KEY \
+                          --build-arg VITE_APP_API_ENDPOINT_URL=https://api.themoviedb.org/3 \
                           -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG .
                     '''
                 }
@@ -66,12 +47,11 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 sh '''
-                    echo "Deploying to EKS..."
-
                     aws eks update-kubeconfig --region ap-south-1 --name EKS_CLUSTER
 
-                    kubectl apply -f $K8S_DIR/deployment.yml
-                    kubectl apply -f $K8S_DIR/service.yml
+                    # Update deployment image dynamically
+                    kubectl set image deployment/netflix-app \
+                      netflix-app=$DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
 
                     kubectl rollout status deployment/netflix-app
 
@@ -84,11 +64,11 @@ pipeline {
 
     post {
         success {
-            echo "🚀 SUCCESS: CI/CD pipeline completed & deployed to EKS"
+            echo "🚀 SUCCESS: Deployed to EKS"
         }
 
         failure {
-            echo "❌ FAILED pipeline - check logs"
+            echo "❌ FAILED pipeline"
         }
     }
 }
