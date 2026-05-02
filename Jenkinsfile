@@ -2,15 +2,17 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "netflix-clone"
         DOCKERHUB_USER = "mandar0333"
+        IMAGE_NAME = "netflix-clone"
+        IMAGE_TAG = "latest"
+        K8S_DIR = "Kubernetes"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/maddy033/devsecops-netflix.git'
+                git 'https://github.com/maddy033/devsecops-netflix.git'
             }
         }
 
@@ -23,7 +25,7 @@ pipeline {
             }
         }
 
-        stage('Build App') {
+        stage('Build Application') {
             steps {
                 sh '''
                     echo "Building React app..."
@@ -45,38 +47,48 @@ pipeline {
             steps {
                 sh '''
                     echo "Tagging image..."
-                    docker tag $IMAGE_NAME $DOCKERHUB_USER/$IMAGE_NAME:latest
+                    docker tag $IMAGE_NAME $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
                 '''
             }
         }
 
         stage('Docker Login & Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS')]) {
 
                     sh '''
-                        echo "Logging into Docker Hub..."
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-
-                        echo "Pushing image..."
-                        docker push $DOCKERHUB_USER/$IMAGE_NAME:latest
+                        echo "$PASS" | docker login -u "$USER" --password-stdin
+                        docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
                     '''
                 }
             }
         }
 
+        stage('Deploy to EKS') {
+            steps {
+                sh '''
+                    echo "Deploying to Kubernetes (EKS)..."
+
+                    kubectl apply -f $K8S_DIR/deployment.yml
+                    kubectl apply -f $K8S_DIR/service.yml
+
+                    echo "Deployment status:"
+                    kubectl get pods
+                    kubectl get svc
+                '''
+            }
+        }
     }
 
     post {
         success {
-            echo "🚀 SUCCESS: Image pushed to Docker Hub"
+            echo "🚀 CI/CD Pipeline SUCCESS - App deployed to EKS"
         }
+
         failure {
-            echo "❌ FAILED: Check logs"
+            echo "❌ Pipeline FAILED - Check logs"
         }
     }
 }
